@@ -4,12 +4,41 @@ import Nav from "@/components/Nav";
 import ProgressCard from "@/components/ProgressCard";
 import EntryForm from "@/components/EntryForm";
 import ShareButton from "@/components/ShareButton";
+import TrialLocked from "@/components/TrialLocked";
+
+const TRIAL_DAYS = 7;
 
 export default async function DashboardPage() {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_pro, created_at")
+    .eq("id", user!.id)
+    .maybeSingle();
+
+  const isPro = profile?.is_pro ?? false;
+  const createdAt = profile?.created_at
+    ? new Date(profile.created_at)
+    : new Date();
+  const msPerDay = 86400000;
+  const daysSinceSignup = Math.floor(
+    (Date.now() - createdAt.getTime()) / msPerDay
+  );
+  const trialDaysLeft = Math.max(0, TRIAL_DAYS - daysSinceSignup);
+  const trialExpired = !isPro && trialDaysLeft === 0;
+
+  if (trialExpired) {
+    return (
+      <>
+        <Nav />
+        <TrialLocked />
+      </>
+    );
+  }
 
   const { data: goal } = await supabase
     .from("goals")
@@ -79,6 +108,13 @@ export default async function DashboardPage() {
     <>
       <Nav />
       <main className="max-w-4xl mx-auto px-6 py-8">
+        {!isPro && (
+          <p className="text-sm text-route-600 font-medium mb-4">
+            {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left in your
+            free trial
+          </p>
+        )}
+
         <ProgressCard
           goalName={goal.name}
           dayNumber={dayNumber}
