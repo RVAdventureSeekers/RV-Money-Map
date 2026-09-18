@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 
-export default function SubscriptionCard({ isPro }: { isPro: boolean }) {
+export default function SubscriptionCard({
+  isPro,
+  trialDaysLeft,
+}: {
+  isPro: boolean;
+  trialDaysLeft: number;
+}) {
   const [loading, setLoading] = useState(false);
 
   async function handleUpgrade() {
@@ -21,14 +27,23 @@ export default function SubscriptionCard({ isPro }: { isPro: boolean }) {
     if (data.url) window.location.href = data.url;
   }
 
+  let message: string;
+  if (isPro) {
+    message =
+      "You're on RV Money Map Pro. Unlimited goals, CSV export, and custom share cards are unlocked.";
+  } else if (trialDaysLeft > 0) {
+    message = `Free trial: unlimited goals for ${trialDaysLeft} more day${
+      trialDaysLeft === 1 ? "" : "s"
+    }. After that, free accounts are limited to 1 goal — upgrade for $4/month to keep unlimited goals plus CSV export.`;
+  } else {
+    message =
+      "Free plan: one goal and the core dashboard. Upgrade for $4/month to unlock unlimited goals, CSV export, and more.";
+  }
+
   return (
     <div className="bg-white border border-sand-200 rounded-card p-5">
       <p className="text-sm font-medium text-ink-900 mb-1">Subscription</p>
-      <p className="text-sm text-ink-700 mb-4">
-        {isPro
-          ? "You're on RV Money Map Pro. Multiple goals, CSV export, and custom share cards are unlocked."
-          : "Free plan: one goal and the core dashboard. Upgrade for $4/month to unlock CSV export and more."}
-      </p>
+      <p className="text-sm text-ink-700 mb-4">{message}</p>
       {isPro ? (
         <button
           className="btn-secondary"
