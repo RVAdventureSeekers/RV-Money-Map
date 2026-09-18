@@ -61,18 +61,23 @@ export default function GoalForm({ goal }: { goal: Goal | null }) {
       end_date: endDate,
     };
 
-    const { error: saveError } = goal
-      ? await supabase.from("goals").update(payload).eq("id", goal.id)
-      : await supabase.from("goals").insert(payload);
+    const { data: savedGoal, error: saveError } = goal
+      ? await supabase
+          .from("goals")
+          .update(payload)
+          .eq("id", goal.id)
+          .select()
+          .single()
+      : await supabase.from("goals").insert(payload).select().single();
 
     setSaving(false);
 
-    if (saveError) {
+    if (saveError || !savedGoal) {
       setError("Couldn't save your goal. Try again.");
       return;
     }
 
-    router.push("/dashboard");
+    router.push(`/dashboard/${savedGoal.id}`);
     router.refresh();
   }
 
