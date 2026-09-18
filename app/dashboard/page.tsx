@@ -1,12 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import Nav from "@/components/Nav";
-import ProgressCard from "@/components/ProgressCard";
-import EntryForm from "@/components/EntryForm";
-import ShareButton from "@/components/ShareButton";
-import TrialLocked from "@/components/TrialLocked";
-
-const TRIAL_DAYS = 7;
+import GoalSummaryCard from "@/components/GoalSummaryCard";
+import { canUseMultipleGoals, trialDaysLeft } from "@/lib/goals";
 
 export default async function DashboardPage() {
   const supabase = createClient();
@@ -14,140 +10,91 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const { data: goals } = await supabase
+    .from("goals")
+    .select("*")
+    .eq("user_id", user!.id)
+    .order("created_at", { ascending: true });
+
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_pro, created_at")
+    .select("is_pro")
     .eq("id", user!.id)
     .maybeSingle();
 
   const isPro = profile?.is_pro ?? false;
-  const createdAt = profile?.created_at
-    ? new Date(profile.created_at)
-    : new Date();
-  const msPerDay = 86400000;
-  const daysSinceSignup = Math.floor(
-    (Date.now() - createdAt.getTime()) / msPerDay
-  );
-  const trialDaysLeft = Math.max(0, TRIAL_DAYS - daysSinceSignup);
-  const trialExpired = !isPro && trialDaysLeft === 0;
+  const goalList = goals ?? [];
+  const goalIds = goalList.map((g) => g.id);
 
-  if (trialExpired) {
-    return (
-      <>
-        <Nav />
-        <TrialLocked />
-      </>
-    );
+  const { data: entries } = goalIds.length
+    ? await supabase
+        .from("entries")
+        .select("goal_id, entry_type, amount")
+        .in("goal_id", goalIds)
+    : { data: [] as { goal_id: string; entry_type: string; amount: number }[] };
+
+  function netFor(goalId: string) {
+    const goalEntries = (entries ?? []).filter((e) => e.goal_id === goalId);
+    const income = goalEntries
+      .filter((e) => e.entry_type === "income")
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+    const expenses = goalEntries
+      .filter((e) => e.entry_type === "expense")
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+    return income - expenses;
   }
 
-  const { data: goal } = await supabase
-    .from("goals")
-    .select("*")
-    .eq("user_id", user!.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!goal) {
-    return (
-      <>
-        <Nav />
-        <main className="max-w-4xl mx-auto px-6 py-16 text-center">
-          <h1 className="text-xl font-medium text-ink-900 mb-2">
-            Set up your first goal
-          </h1>
-          <p className="text-sm text-ink-700 mb-6">
-            Tell us what you're paying off and by when, and we'll track your
-            progress every day.
-          </p>
-          <Link href="/settings">
-            <button className="btn-primary">Create a goal</button>
-          </Link>
-        </main>
-      </>
-    );
-  }
-
-  const { data: entries } = await supabase
-    .from("entries")
-    .select("*")
-    .eq("goal_id", goal.id);
-
-  const today = new Date().toISOString().slice(0, 10);
-  const startDate = new Date(goal.start_date);
-  const endDate = new Date(goal.end_date);
-  const now = new Date();
-
-  const totalDays = Math.max(
-    1,
-    Math.round((endDate.getTime() - startDate.getTime()) / 86400000)
-  );
-  const dayNumber = Math.min(
-    totalDays,
-    Math.max(1, Math.round((now.getTime() - startDate.getTime()) / 86400000))
-  );
-
-  const income = (entries ?? []).filter((e) => e.entry_type === "income");
-  const expenses = (entries ?? []).filter((e) => e.entry_type === "expense");
-
-  const totalIncome = income.reduce((sum, e) => sum + Number(e.amount), 0);
-  const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-  const netSoFar = totalIncome - totalExpenses;
-
-  const todaysIncome = income
-    .filter((e) => e.entry_date === today)
-    .reduce((sum, e) => sum + Number(e.amount), 0);
-  const todaysExpenses = expenses
-    .filter((e) => e.entry_date === today)
-    .reduce((sum, e) => sum + Number(e.amount), 0);
-
-  const money = (n: number) =>
-    n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  const daysLeft = trialDaysLeft(user!.created_at!);
+  const multiGoalsUnlocked = canUseMultipleGoals(user!.created_at!, isPro);
+  const canAddGoal = multiGoalsUnlocked || goalList.length === 0;
 
   return (
     <>
       <Nav />
       <main className="max-w-4xl mx-auto px-6 py-8">
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-xl font-medium text-ink-900">Your goals</h1>
+          {canAddGoal ? (
+            <Link href="/goals/new">
+              <button className="btn-primary">+ New goal</button>
+            </Link>
+          ) : (
+            <Link href="/settings">
+              <button className="btn-secondary">Upgrade for more goals</button>
+            </Link>
+          )}
+        </div>
+
         {!isPro && (
-          <p className="text-sm text-route-600 font-medium mb-4">
-            {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left in your
-            free trial
+          <p className="text-sm text-ink-700 mb-6">
+            {daysLeft > 0
+              ? `Free trial: unlimited goals for ${daysLeft} more day${
+                  daysLeft === 1 ? "" : "s"
+                }.`
+              : "Your free trial has ended — free accounts track 1 goal. Upgrade to Pro for unlimited goals."}
           </p>
         )}
 
-        <ProgressCard
-          goalName={goal.name}
-          dayNumber={dayNumber}
-          totalDays={totalDays}
-          netSoFar={netSoFar}
-          targetAmount={Number(goal.target_amount)}
-        />
-
-        <div className="grid grid-cols-2 gap-3 mt-4">
-          <div className="bg-sand-100 rounded-card p-4">
-            <p className="text-xs text-ink-700 mb-1">Today's income</p>
-            <p className="text-lg font-medium text-ink-900">
-              {money(todaysIncome)}
+        {goalList.length === 0 ? (
+          <div className="bg-white border border-sand-200 rounded-card p-10 text-center mt-4">
+            <p className="text-sm text-ink-700 mb-4">
+              You don't have a goal yet. Create one to start tracking.
             </p>
+            <Link href="/goals/new">
+              <button className="btn-primary">Create your first goal</button>
+            </Link>
           </div>
-          <div className="bg-sand-100 rounded-card p-4">
-            <p className="text-xs text-ink-700 mb-1">Today's expenses</p>
-            <p className="text-lg font-medium text-ink-900">
-              {money(todaysExpenses)}
-            </p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 mt-4">
+            {goalList.map((goal) => (
+              <GoalSummaryCard
+                key={goal.id}
+                goal={goal}
+                netSoFar={netFor(goal.id)}
+              />
+            ))}
           </div>
-        </div>
-
-        <EntryForm goalId={goal.id} />
-
-        <div className="mt-4">
-          <ShareButton
-            goalName={goal.name}
-            dayNumber={dayNumber}
-            totalDays={totalDays}
-            netSoFar={netSoFar}
-          />
-        </div>
+        )}
       </main>
     </>
   );
