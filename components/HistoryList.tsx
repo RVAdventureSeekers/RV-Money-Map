@@ -9,6 +9,7 @@ type Entry = {
   label: string;
   amount: number;
   entry_date: string;
+  goalName?: string | null;
 };
 
 export default function HistoryList({
@@ -27,9 +28,12 @@ export default function HistoryList({
   }
 
   function exportCsv() {
-    const header = "date,type,label,amount\n";
+    const header = "date,goal,type,label,amount\n";
     const rows = entries
-      .map((e) => `${e.entry_date},${e.entry_type},"${e.label}",${e.amount}`)
+      .map(
+        (e) =>
+          `${e.entry_date},"${e.goalName ?? ""}",${e.entry_type},"${e.label}",${e.amount}`
+      )
       .join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -61,7 +65,7 @@ export default function HistoryList({
       <div className="bg-white border border-sand-200 rounded-card divide-y divide-sand-200">
         {entries.length === 0 && (
           <p className="text-sm text-ink-700 p-5">
-            No entries yet. Add your first one from the dashboard.
+            No entries yet. Add your first one from a goal's dashboard.
           </p>
         )}
         {entries.map((entry) => (
@@ -71,7 +75,10 @@ export default function HistoryList({
           >
             <div>
               <p className="text-sm text-ink-900">{entry.label}</p>
-              <p className="text-xs text-ink-700">{entry.entry_date}</p>
+              <p className="text-xs text-ink-700">
+                {entry.entry_date}
+                {entry.goalName ? ` · ${entry.goalName}` : ""}
+              </p>
             </div>
             <div className="flex items-center gap-4">
               <span
